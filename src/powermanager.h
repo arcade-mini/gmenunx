@@ -1,7 +1,7 @@
 #ifndef POWERMANAGER_H
 #define POWERMANAGER_H
 
-#include <SDL.h>
+#include <SDL/SDL.h>
 #include "gmenu2x.h"
 
 class PowerManager {

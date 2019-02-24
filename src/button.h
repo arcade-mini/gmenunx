@@ -22,7 +22,7 @@
 #define BUTTON_H_
 
 #include <string>
-#include <SDL.h>
+#include <SDL/SDL.h>
 #include "FastDelegate.h"
 
 using std::string;

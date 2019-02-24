@@ -38,6 +38,10 @@ MenuSettingFile::MenuSettingFile(GMenu2X *gmenu2x, const string &title, const st
 	btn = new IconButton(gmenu2x, "skin:imgs/buttons/a.png", gmenu2x->tr["Select"]);
 	btn->setAction(MakeDelegate(this, &MenuSettingFile::edit));
 	buttonBox.add(btn);
+	
+	btn = new IconButton(gmenu2x, "skin:imgs/buttons/b.png", gmenu2x->tr["Exit"]);
+	btn->setAction(MakeDelegate(this, &MenuSettingFile::edit));
+	buttonBox.add(btn);
 }
 
 void MenuSettingFile::edit() {

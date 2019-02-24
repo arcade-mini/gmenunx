@@ -21,7 +21,7 @@
 #ifndef TOUCHSCREEN_H
 #define TOUCHSCREEN_H
 
-#include <SDL.h>
+#include <SDL/SDL.h>
 
 #include <fcntl.h>
 #include <cstdint>

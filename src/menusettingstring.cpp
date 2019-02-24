@@ -39,6 +39,10 @@ MenuSettingString::MenuSettingString(
 	btn = new IconButton(gmenu2x, "skin:imgs/buttons/a.png", gmenu2x->tr["Edit"]);
 	btn->setAction(MakeDelegate(this, &MenuSettingString::edit));
 	buttonBox.add(btn);
+	
+	btn = new IconButton(gmenu2x, "skin:imgs/buttons/b.png", gmenu2x->tr["Exit"]);
+	btn->setAction(MakeDelegate(this, &MenuSettingString::edit));
+	buttonBox.add(btn);
 }
 
 void MenuSettingString::edit()

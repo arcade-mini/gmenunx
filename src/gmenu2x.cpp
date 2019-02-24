@@ -178,20 +178,9 @@ int16_t getMMCStatus(void) {
 	return MMC_ERROR;
 }
 
-enum udc_status {
-	UDC_REMOVE, UDC_CONNECT, UDC_ERROR
-};
-
-int udcConnectedOnBoot;
-int16_t getUDCStatus(void) {
-	if (memdev > 0) return (memregs[0x10300 >> 2] >> 7 & 0b1);
-	return UDC_ERROR;
-}
-
 int16_t tvOutPrev = false, tvOutConnected;
 bool getTVOutStatus() {
-	if (memdev > 0) return !(memregs[0x10300 >> 2] >> 25 & 0b1);
-	return false;
+	return true;
 }
 
 enum vol_mode_t {
@@ -285,7 +274,7 @@ GMenu2X::GMenu2X() {
 	SDL_ShowCursor(0);
 #elif defined(TARGET_RS97)
 	SDL_ShowCursor(0);
-	s->ScreenSurface = SDL_SetVideoMode(320, 480, confInt["videoBpp"], SDL_HWSURFACE/*|SDL_DOUBLEBUF*/);
+	s->ScreenSurface = SDL_SetVideoMode(480, 272, confInt["videoBpp"], SDL_HWSURFACE);
 	s->raw = SDL_CreateRGBSurface(SDL_SWSURFACE, resX, resY, confInt["videoBpp"], 0, 0, 0, 0);
 #else
 	s->raw = SDL_SetVideoMode(resX, resY, confInt["videoBpp"], SDL_HWSURFACE|SDL_DOUBLEBUF);
@@ -314,7 +303,6 @@ GMenu2X::GMenu2X() {
 	system("ln -sf $(mount | grep int_sd | cut -f 1 -d ' ') /tmp/.int_sd");
 	tvOutConnected = getTVOutStatus();
 	preMMCStatus = curMMCStatus = getMMCStatus();
-	udcConnectedOnBoot = getUDCStatus();
 #endif
 	volumeModePrev = volumeMode = getVolumeMode(confInt["globalVolume"]);
 	
@@ -330,8 +318,6 @@ GMenu2X::GMenu2X() {
 }
 
 void GMenu2X::main() {
-	pthread_t thread_id;
-
 	bool quit = false;
 	int i = 0, x = 0, y = 0, ix = 0, iy = 0;
 	uint32_t tickBattery = -4800, tickNow; //, tickMMC = 0; //, tickUSB = 0;
@@ -368,14 +354,6 @@ void GMenu2X::main() {
 			*iconManual = sc.skinRes("imgs/manual.png"),
 			*iconCPU = sc.skinRes("imgs/cpu.png"),
 			*iconMenu = sc.skinRes("imgs/menu.png");
-
-	if (pthread_create(&thread_id, NULL, mainThread, this)) {
-		ERROR("%s, failed to create main thread\n", __func__);
-	}
-
-#if defined(TARGET_RS97)
-	if (udcConnectedOnBoot == UDC_CONNECT) checkUDC();
-#endif
 
 	if (curMMCStatus == MMC_INSERT) mountSd(true);
 
@@ -596,7 +574,6 @@ void GMenu2X::main() {
 	}
 
 	exitMainThread = true;
-	pthread_join(thread_id, NULL);
 	// delete btnContextMenu;
 	// btnContextMenu = NULL;
 }
@@ -607,7 +584,7 @@ bool GMenu2X::inputCommonActions(bool &inputAction) {
 	if (powerManager->suspendActive) {
 		// SUSPEND ACTIVE
 		input.setWakeUpInterval(0);
-		while (!input[POWER]) {
+		while (!input[CONFIRM]) {
 			input.update();
 		}
 		powerManager->doSuspend(0);
@@ -650,12 +627,6 @@ bool GMenu2X::inputCommonActions(bool &inputAction) {
 			// VOLUME / MUTE
 			setVolume(confInt["globalVolume"], true);
 			return true;
-#ifdef TARGET_RS97
-		} else if (input[POWER]) {
-			udcConnectedOnBoot = UDC_CONNECT;
-			checkUDC();
-			return true;
-#endif
 		}
 	}
 
@@ -1036,7 +1007,6 @@ void GMenu2X::readTmp() {
 		else if (name == "tvOutPrev") tvOutPrev = atoi(value.c_str());
 	}
 	if (TVOut != "NTSC" && TVOut != "PAL") TVOut = "OFF";
-	udcConnectedOnBoot = 0;
 	inf.close();
 	unlink("/tmp/gmenu2x.tmp");
 }
@@ -1568,10 +1538,10 @@ void GMenu2X::hwCheck() {
 
 			if (tvOutConnected) {
 				MessageBox mb(this, tr["TV-out connected.\nContinue?"], "skin:icons/tv.png");
-				mb.setButton(SETTINGS, tr["Yes"]);
+				mb.setButton(MENU, tr["Yes"]);
 				mb.setButton(CONFIRM,  tr["No"]);
 
-				if (mb.exec() == SETTINGS) {
+				if (mb.exec() == MENU) {
 					TVOut = confStr["TVOut"];
 					lcd_brightness = 0;
 				}
@@ -1716,65 +1686,6 @@ void GMenu2X::umountSdDialog() {
 	}
 }
 
-void GMenu2X::checkUDC() {
-	if (getUDCStatus() == UDC_CONNECT) {
-		if (!fileExists("/sys/devices/platform/musb_hdrc.0/gadget/gadget-lun1/file")) {
-			MessageBox mb(this, tr["This device does not support USB mount."], "skin:icons/usb.png");
-			mb.setButton(CANCEL,  tr["Charger"]);
-			mb.exec();
-			return;
-		}
-
-		MessageBox mb(this, tr["Select USB mode:"], "skin:icons/usb.png");
-		mb.setButton(CONFIRM, tr["USB Drive"]);
-		mb.setButton(CANCEL,  tr["Charger"]);
-		if (mb.exec() == CONFIRM) {
-			umountSd(false);
-			system("echo \"\" > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun1/file; par=$(readlink /tmp/.int_sd | head -c -3 | tail -c 1); par=$(ls /dev/mmcblk$par* | tail -n 1); echo \"$par\" > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun1/file");
-			INFO("%s, connect USB disk for internal SD", __func__);
-
-			if (getMMCStatus() == MMC_INSERT) {
-				umountSd(true);
-				system("echo \"\" > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun0/file; par=$(( $(readlink /tmp/.int_sd | head -c -3 | tail -c 1) ^ 1 )); par=$(ls /dev/mmcblk$par* | tail -n 1); echo \"$par\" > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun0/file");
-				INFO("%s, connect USB disk for external SD", __func__);
-			}
-
-			sc[confStr["wallpaper"]]->blit(s,0,0);
-
-			{
-				MessageBox mb(this, tr["USB Drive Connected"], "skin:icons/usb.png");
-				mb.setAutoHide(500);
-				mb.exec();
-			}
-
-			powerManager->clearTimer();
-
-			while (udcConnectedOnBoot == UDC_CONNECT && getUDCStatus() == UDC_CONNECT) {
-				input.update();
-				if ( input[MENU] && input[POWER]) udcConnectedOnBoot = UDC_REMOVE;
-			}
-
-			{
-				MessageBox mb(this, tr["USB disconnected. Rebooting..."], "skin:icons/usb.png");
-				mb.setAutoHide(200);
-				mb.exec();
-			}
-
-			system("sync; reboot & sleep 1m");
-
-			system("echo '' > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun0/file");
-			mountSd(false);
-			INFO("%s, disconnect usbdisk for internal sd", __func__);
-			if (getMMCStatus() == MMC_INSERT) {
-				system("echo '' > /sys/devices/platform/musb_hdrc.0/gadget/gadget-lun1/file");
-				mountSd(true);
-				INFO("%s, disconnect USB disk for external SD", __func__);
-			}
-			// powerManager->resetSuspendTimer();
-		}
-	}
-}
-
 void GMenu2X::formatSd() {
 	MessageBox mb(this, tr["Format internal SD card?"], "skin:icons/format.png");
 	mb.setButton(CONFIRM, tr["Yes"]);
@@ -1847,12 +1758,12 @@ void GMenu2X::contextMenu() {
 
 			if (inputCommonActions(inputAction)) continue;
 
-			if ( input[MENU] || input[CANCEL]) close = true;
+			if ( input[MENU] || input[CANCEL] || input[SETTINGS]) close = true;
 			else if ( input[UP] ) sel = (sel - 1 < 0) ? (int)voices.size() - 1 : sel - 1 ;
 			else if ( input[DOWN] ) sel = (sel + 1 > (int)voices.size() - 1) ? 0 : sel + 1;
 			else if ( input[LEFT] || input[PAGEUP] ) sel = 0;
 			else if ( input[RIGHT] || input[PAGEDOWN] ) sel = (int)voices.size() - 1;
-			else if ( input[SETTINGS] || input[CONFIRM] ) { voices[sel].action(); close = true; }
+			else if (  input[CONFIRM] ) { voices[sel].action(); close = true; }
 		} while (!inputAction);
 	}
 }

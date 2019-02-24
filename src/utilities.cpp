@@ -30,7 +30,7 @@
 #include <math.h>
 #include <errno.h>
 
-#include <SDL.h>
+#include <SDL/SDL.h>
 
 #include "utilities.h"
 #include "debug.h"

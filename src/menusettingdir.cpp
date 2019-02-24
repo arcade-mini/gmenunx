@@ -37,6 +37,10 @@ MenuSettingDir::MenuSettingDir(GMenu2X *gmenu2x, const string &title, const stri
 	btn = new IconButton(gmenu2x, "skin:imgs/buttons/a.png", gmenu2x->tr["Select"]);
 	btn->setAction(MakeDelegate(this, &MenuSettingDir::edit));
 	buttonBox.add(btn);
+	
+	btn = new IconButton(gmenu2x, "skin:imgs/buttons/b.png", gmenu2x->tr["Exit"]);
+	btn->setAction(MakeDelegate(this, &MenuSettingDir::clear));
+	buttonBox.add(btn);
 }
 
 void MenuSettingDir::edit() {
